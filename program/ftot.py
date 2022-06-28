@@ -56,7 +56,7 @@ if __name__ == '__main__':
             f  = facilities; process GIS feature classes and commodity input CSV files
             c  = connectivity; connects facilities to the network using artificial links and exports geodatabase FCs as 
             shapefiles
-            g  = graph; reads in shapefiles using networkX and prepares, cleans, and stores the network digraph in the
+            g  = graph; reads in shapefiles using networkX and prepares, cleans, and stores the network digraph in the 
             database
             
             # optimization options
@@ -72,6 +72,9 @@ if __name__ == '__main__':
             based off the FTOT v5 candidate generation algorithm optimization results 
             
             oc2b = optional step to solve and save pulp problem from pickled, constrained, problem. Run oc3 after.
+
+            oscr = optimization for supply chain resilience. Runs modified o1 and o2 steps with alternate input files and 
+            calculates resiliency measures.
 
             os =  optimization sourcing; optional step to calculate source facilities for optimal flows, 
             uses existing solution from o and must be run after o
@@ -108,7 +111,7 @@ if __name__ == '__main__':
 
     parser.add_argument("task", choices=("s", "f", "f2", "c", "c2", "g", "g2",
                                          "o", "oc",
-                                         "o1", "o2", "o2b", "oc1", "oc2", "oc2b", "oc3", "os", "p",
+                                         "o1", "o2", "o2b", "oc1", "oc2", "oc2b", "oc3", "oscr", "os", "p",
                                          "d", "m", "mb", "mc", "md", "m2", "m2b", "m2c", "m2d"
                                          "test"
                                          ), type=str)
@@ -227,6 +230,10 @@ if __name__ == '__main__':
             oc1(the_scenario, logger)
             oc2(the_scenario, logger)
             oc3(the_scenario, logger)
+        
+        elif args.task in ['oscr']:
+            from ftot_scr import supply_chain_scenarios
+            supply_chain_scenarios(the_scenario, logger)
 
         # optimization setup
         elif args.task in ['o1']:
