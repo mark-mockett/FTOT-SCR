@@ -73,9 +73,9 @@ for i in range(len(number)):
 
 # END MODIFICATION
 
-FTOT_VERSION = "2022.1"
-SCHEMA_VERSION = "6.0.2"
-VERSION_DATE = "4/1/2022"
+FTOT_VERSION = "2023.2"
+SCHEMA_VERSION = "7.0.2"
+VERSION_DATE = "7/14/2023"
 
 def supply_chain_scenarios(the_scenario, logger): 
     earthquake_scenario = np.load("earthquake_events.npy")
