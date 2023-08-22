@@ -104,10 +104,10 @@ def supply_chain_scenarios(the_scenario, logger):
     total_demand_fuel = 136497 # total demand for this supply chain layout
     total_final_demand = 4073312.9 + 254401.1 # total demand before optimization
     # Variables for output from optimization
-    #UnmetDemandAmount = np.zeros((int(WeekInYear*7),plan_horizon, N))
-    #DailyCost = np.zeros((int(WeekInYear*7),plan_horizon, N))
-    #np.save("UnmetDemandAmount.npy", UnmetDemandAmount)
-    #np.save("DailyCost.npy", DailyCost)
+    UnmetDemandAmount = np.zeros((int(WeekInYear*7),plan_horizon, N))
+    DailyCost = np.zeros((int(WeekInYear*7),plan_horizon, N))
+    np.save("UnmetDemandAmount.npy", UnmetDemandAmount)
+    np.save("DailyCost.npy", DailyCost)
 
 
     # for each scenario and time:
@@ -159,7 +159,7 @@ def supply_chain_scenarios(the_scenario, logger):
                         w2[t] = w2[t] + (float(daily_cost-initial_cost + UDP)/float(production))
 
                     else:
-                        if UDR  > 0:
+                        if UDR > 0:
                             UDP = UD * 5000
                             R1[i] = R1[i] + (float(daily_cost-initial_cost + UDP)/float(production))*7
                             w1[t] = w1[t] + (float(daily_cost-initial_cost + UDP)/float(production))
@@ -192,7 +192,7 @@ def supply_chain_scenarios(the_scenario, logger):
                 UDR = float(UD*DayInYear)/float(total_demand_fuel)
                 production = float(total_final_demand)/float(DayInYear) - UnmetDemandAmount[temp_day][t][i]
 
-                if UDR  > 0:
+                if UDR > 0:
                     UDP = UD * 5000
                     R1[i] = R1[i] + (float(daily_cost-initial_cost + UDP)/float(production))*DayInYear
                     w1[t] = w1[t] + (float(daily_cost-initial_cost + UDP)/float(production))
@@ -663,99 +663,6 @@ def generate_all_vertices(the_scenario, schedule_dict, schedule_length, time_per
         logger.info('{} vertices created'.format(row_d[0]))
 
     logger.debug("total possible production in scenario: {}".format(total_potential_production))
-
-
-# ===============================================================================
-
-
-def set_edges_volume_capacity(the_scenario, logger):
-    logger.info("starting set_edges_volume_capacity")
-    with sqlite3.connect(the_scenario.main_db) as main_db_con:
-        logger.debug("starting to record volume and capacity for non-pipeline edges")
-
-        main_db_con.execute(
-            "update edges set volume = (select ifnull(ne.volume,0) from networkx_edges ne "
-            "where ne.edge_id = edges.nx_edge_id ) where simple_mode in ('rail','road','water');")
-        main_db_con.execute(
-            "update edges set max_edge_capacity = (select ne.capacity from networkx_edges ne "
-            "where ne.edge_id = edges.nx_edge_id) where simple_mode in ('rail','road','water');")
-        logger.debug("volume and capacity recorded for non-pipeline edges")
-
-        logger.debug("starting to record volume and capacity for pipeline edges")
-        ##
-        main_db_con.executescript("""update edges set volume =
-        (select l.background_flow
-         from pipeline_mapping pm,
-         (select id_field_name, cn.source_OID as link_id, min(cn.capacity) capac,
-        max(cn.volume) background_flow, source
-        from capacity_nodes cn
-        where cn.id_field_name = 'MASTER_OID'
-        and ifnull(cn.capacity,0)>0
-        group by link_id) l
-
-        where edges.tariff_id = pm.id
-        and pm.id_field_name = 'tariff_ID'
-        and pm.mapping_id_field_name = 'MASTER_OID'
-        and l.id_field_name = 'MASTER_OID'
-        and pm.mapping_id = l.link_id
-        and instr(edges.mode, l.source)>0)
-         where simple_mode = 'pipeline'
-        ;
-
-        update edges set max_edge_capacity =
-        (select l.capac
-        from pipeline_mapping pm,
-        (select id_field_name, cn.source_OID as link_id, min(cn.capacity) capac,
-        max(cn.volume) background_flow, source
-        from capacity_nodes cn
-        where cn.id_field_name = 'MASTER_OID'
-        and ifnull(cn.capacity,0)>0
-        group by link_id) l
-
-        where edges.tariff_id = pm.id
-        and pm.id_field_name = 'tariff_ID'
-        and pm.mapping_id_field_name = 'MASTER_OID'
-        and l.id_field_name = 'MASTER_OID'
-        and pm.mapping_id = l.link_id
-        and instr(edges.mode, l.source)>0)
-        where simple_mode = 'pipeline'
-        ;""")
-        logger.debug("volume and capacity recorded for pipeline edges")
-        logger.debug("starting to record units and conversion multiplier")
-        main_db_con.execute("""update edges
-        set capacity_units =
-        (case when simple_mode = 'pipeline' then 'kbarrels'
-        when simple_mode = 'road' then 'truckload'
-        when simple_mode = 'rail' then 'railcar'
-        when simple_mode = 'water' then 'barge'
-        else 'unexpected mode' end)
-        ;""")
-        main_db_con.execute("""update edges
-        set units_conversion_multiplier =
-        (case when simple_mode = 'pipeline' and phase_of_matter = 'liquid' then {}
-        when simple_mode = 'road'  and phase_of_matter = 'liquid' then {}
-        when simple_mode = 'road'  and phase_of_matter = 'solid' then {}
-        when simple_mode = 'rail'  and phase_of_matter = 'liquid' then {}
-        when simple_mode = 'rail'  and phase_of_matter = 'solid' then {}
-        when simple_mode = 'water'  and phase_of_matter = 'liquid' then {}
-        when simple_mode = 'water'  and phase_of_matter = 'solid' then {}
-        else 1 end)
-        ;""".format(THOUSAND_GALLONS_PER_THOUSAND_BARRELS,
-                    the_scenario.truck_load_liquid.magnitude,
-                    the_scenario.truck_load_solid.magnitude,
-                    the_scenario.railcar_load_liquid.magnitude,
-                    the_scenario.railcar_load_solid.magnitude,
-                    the_scenario.barge_load_liquid.magnitude,
-                    the_scenario.barge_load_solid.magnitude,
-                    ))
-        logger.debug("units and conversion multiplier recorded for all edges; starting capacity minus volume")
-        main_db_con.execute("""update edges
-        set capac_minus_volume_zero_floor =
-        365*max((select (max_edge_capacity - ifnull(volume,0)) where  max_edge_capacity is not null),0)
-        where  max_edge_capacity is not null
-        ;""")
-        logger.debug("capacity minus volume (minimum set to zero) recorded for all edges")
-    return
 
 
 # ===============================================================================
@@ -1244,263 +1151,6 @@ def create_primary_processor_vertex_constraints(logger, the_scenario, prob, flow
                             vertex_id, commodity_id, source)
 
     logger.debug("FINISHED: create_primary_processor_conservation_of_flow_constraints")
-    return prob
-
-
-def create_primary_processor_vertex_constraints(logger, the_scenario, prob, flow_var):
-    logger.debug("STARTING:  create_primary_processor_vertex_constraints - conservation of flow")
-    # for all of these vertices, flow in always  == flow out
-    # node_counter = 0
-    # node_constraint_counter = 0
-
-    # BEGIN MODIFICATION - logging            
-    i = np.load("scenario_num.npy")
-    t = np.load("time_horizon.npy")
-    logger.info("scenario {}".format(i))
-    logger.info("time horizon {}".format(t))
-    # END MODIFICATION
-
-    with sqlite3.connect(the_scenario.main_db) as main_db_con:
-        db_cur = main_db_con.cursor()
-
-        # total flow in == total flow out, subject to conversion;
-        # dividing by "required quantity" functionally converts all commodities to the same "processor-specific units"
-
-        # processor primary vertices with input commodity and  quantity needed to produce specified output quantities
-        # 2 sets of constraints; one for the primary processor vertex to cover total flow in and out
-        # one for each input and output commodity (sum over sources) to ensure its ratio matches facility_commodities
-
-        # the current construction of this method is dependent on having only one input commodity type per processor
-        # this limitation makes sharing max transport distance from the input to an output commodity feasible
-
-        logger.debug("conservation of flow and commodity ratios, primary processor vertices:")
-        sql = """select v.vertex_id,
-        (case when e.o_vertex_id = v.vertex_id then 'out' 
-        when e.d_vertex_id = v.vertex_id then 'in' else 'error' end) in_or_out_edge,
-        (case when e.o_vertex_id = v.vertex_id then start_day 
-        when e.d_vertex_id = v.vertex_id then end_day else 0 end) constraint_day,
-        e.commodity_id,
-        e.mode,
-        e.edge_id,
-        nx_edge_id, fc.quantity, v.facility_id, c.commodity_name,
-        fc.io,
-        v.activity_level,
-        ifnull(f.candidate, 0) candidate_check,
-        e.source_facility_id,
-        v.source_facility_id,
-        v.commodity_id,
-        c.share_max_transport_distance
-        from vertices v, facility_commodities fc, facility_type_id ft, commodities c, facilities f
-        join edges e on (v.vertex_id = e.o_vertex_id or v.vertex_id = e.d_vertex_id)
-        where ft.facility_type = 'processor'
-        and v.facility_id = f.facility_id
-        and ft.facility_type_id = v.facility_type_id
-        and storage_vertex = 0
-        and v.facility_id = fc.facility_id
-        and fc.commodity_id = c.commodity_id
-        and fc.commodity_id = e.commodity_id
-        group by v.vertex_id,
-        in_or_out_edge,
-        constraint_day,
-        e.commodity_id,
-        e.mode,
-        e.edge_id,
-        nx_edge_id, fc.quantity, v.facility_id, c.commodity_name,
-        fc.io,
-        v.activity_level,
-        candidate_check,
-        e.source_facility_id,
-        v.commodity_id,
-        v.source_facility_id,
-        ifnull(c.share_max_transport_distance, 'N')
-        order by v.facility_id, e.source_facility_id, v.vertex_id, fc.io, e.edge_id
-        ;"""
-
-        logger.info("Starting the execute")
-        execute_start_time = datetime.datetime.now()
-        sql_data = db_cur.execute(sql)
-        logger.info("Done with the execute fetch all for :")
-        logger.info(
-            "execute for processor primary vertices, with their in and out edges - Total Runtime (HMS): \t{} \t ".format(
-                get_total_runtime_string(execute_start_time)))
-
-        logger.info("Starting the fetchall")
-        fetchall_start_time = datetime.datetime.now()
-        sql_data = sql_data.fetchall()
-        logger.info(
-            "fetchall processor primary vertices, with their in and out edges - Total Runtime (HMS): \t{} \t ".format(
-                get_total_runtime_string(fetchall_start_time)))
-
-        # Nested dictionaries
-        # flow_in_lists[primary_processor_vertex_id] = dict of commodities handled by that processor vertex
-
-        # flow_in_lists[primary_processor_vertex_id][commodity1] =
-        # list of edge ids that flow that commodity into that vertex
-
-        # flow_in_lists[vertex_id].values() to get all flow_in edges for all commodities, a list of lists
-        # if edge out commodity inherits transport distance, then source_facility id must match. if not, aggregate
-
-        flow_in_lists = {}
-        flow_out_lists = {}
-        inherit_max_transport = {}
-        # inherit_max_transport[commodity_id] = 'Y' or 'N'
-
-        for row_a in sql_data:
-
-            vertex_id = row_a[0]
-            in_or_out_edge = row_a[1]
-            # constraint_day = row_a[2]
-            commodity_id = row_a[3]
-            # mode = row_a[4]
-            edge_id = row_a[5]
-            # nx_edge_id = row_a[6]
-            
-            facility_id = row_a[8]
-            
-            # MODIFICATION - replaces quantity = 
-            quantity = facility_cap_noEarthquake[int(facility_id)-1][t+1][i]*float(row_a[7])
-
-            # commodity_name = row_a[9]
-            # fc_io_commodity = row_a[10]
-            # activity_level = row_a[11]
-            # is_candidate = row_a[12]
-            edge_source_facility_id = row_a[13]
-            vertex_source_facility_id = row_a[14]
-            # v_commodity_id = row_a[15]
-            inherit_max_transport_distance = row_a[16]
-            if commodity_id not in inherit_max_transport.keys():
-                if inherit_max_transport_distance == 'Y':
-                    inherit_max_transport[commodity_id] = 'Y'
-                else:
-                    inherit_max_transport[commodity_id] = 'N'
-
-            if in_or_out_edge == 'in':
-                # if the vertex isn't in the main dict yet, add it
-                # could have multiple source facilities
-                # could also have more than one input commodity now
-                flow_in_lists.setdefault(vertex_id, {})
-                flow_in_lists[vertex_id].setdefault((commodity_id, quantity, edge_source_facility_id), []).append(flow_var[edge_id])
-                # flow_in_lists[vertex_id] is itself a dict keyed on commodity, quantity (ratio) and edge_source_facility;
-                # value is a list of edge ids into that vertex of that commodity and edge source
-
-            elif in_or_out_edge == 'out':
-                # for out-lists, could have multiple commodities as well as multiple sources
-                # some may have a max transport distance, inherited or independent, some may not
-                flow_out_lists.setdefault(vertex_id, {})  # if the vertex isn't in the main dict yet, add it
-                flow_out_lists[vertex_id].setdefault((commodity_id, quantity, edge_source_facility_id), []).append(flow_var[edge_id])
-
-            # Because we keyed on commodity, source facility tracking is merged as we pass through the processor vertex
-
-            # 1) for each output commodity, check against an input to ensure correct ratio - only need one input
-            # 2) for each input commodity, check against an output to ensure correct ratio - only need one output;
-            # 2a) first sum sub-flows over input commodity
-
-        # 1----------------------------------------------------------------------
-        constrained_input_flow_vars = set([])
-        # pdb.set_trace()
-
-        for key, value in iteritems(flow_out_lists):
-            #value is a dictionary with commodity & source as keys
-            # set up a dictionary that will be filled with input lists to check ratio against
-            compare_input_dict = {}
-            compare_input_dict_commod = {}
-            vertex_id = key
-            zero_in = False
-            #value is a dictionary keyed on output commodity, quantity required, edge source
-            if vertex_id in flow_in_lists:
-                in_quantity = 0
-                in_commodity_id = 0
-                in_source_facility_id = -1
-                for ikey, ivalue in iteritems(flow_in_lists[vertex_id]):
-                    in_commodity_id = ikey[0]
-                    in_quantity = ikey[1]
-                    in_source = ikey[2]
-                    # list of edges
-                    compare_input_dict[in_source] = ivalue
-                    # to accommodate and track multiple input commodities; does not keep sources separate
-                    # aggregate lists over sources, by commodity
-                    if in_commodity_id not in compare_input_dict_commod.keys():
-                        compare_input_dict_commod[in_commodity_id] = set([])
-                    for edge in ivalue:
-                        compare_input_dict_commod[in_commodity_id].add(edge)
-            else:
-                zero_in = True
-
-
-            # value is a dict - we loop once here for each output commodity and source at the vertex
-            for key2, value2 in iteritems(value):
-                out_commodity_id = key2[0]
-                out_quantity = key2[1]
-                out_source = key2[2]
-                # edge_list = value2
-                flow_var_list = value2
-                # if we need to match source facility, there is only one set of input lists
-                # otherwise, use all input lists - this aggregates sources
-                # need to keep commodities separate, units may be different
-                # known issue -  we could have double-counting problems if only some outputs have to inherit max
-                # transport distance through this facility
-                match_source = inherit_max_transport[out_commodity_id]
-                compare_input_list = []
-                if match_source == 'Y':
-                    if len(list(compare_input_dict_commod.keys())) > 1:
-                        error = "Multiple input commodities for processors and shared max transport distance are" \
-                                " not supported within the same scenario."
-                        logger.error(error)
-                        raise Exception(error)
-
-                    if out_source in compare_input_dict.keys():
-                        compare_input_list = compare_input_dict[out_source]
-                # if no valid input edges - none for vertex, or if output needs to match source and there are no
-                # matching source
-                if zero_in or (match_source == 'Y' and len(compare_input_list) == 0):
-                    prob += lpSum(
-                        flow_var_list) == 0, "processor flow, vertex {} has zero in so zero out of commodity {} " \
-                                             "with source {} if applicable".format(
-                        vertex_id, out_commodity_id, out_source)
-                else:
-                    if match_source == 'Y':
-                        # ratio constraint for this output commodity relative to total input of each commodity
-                        required_flow_out = lpSum(flow_var_list) / out_quantity
-                        # check against an input dict
-                        prob += required_flow_out == lpSum(
-                            compare_input_list) / in_quantity, "processor flow, vertex {}, source_facility {}," \
-                                                               " commodity {} output quantity" \
-                                                               " checked against single input commodity quantity".format(
-                            vertex_id, out_source, out_commodity_id, in_commodity_id)
-                        for flow_var in compare_input_list:
-                            constrained_input_flow_vars.add(flow_var)
-                    else:
-                        for k, v in iteritems(compare_input_dict_commod):
-                            # pdb.set_trace()
-                            # as long as the input source doesn't match an output that needs to inherit
-                            compare_input_list = list(v)
-                            in_commodity_id = k
-                            # ratio constraint for this output commodity relative to total input of each commodity
-                            required_flow_out = lpSum(flow_var_list) / out_quantity
-                            # check against an input dict
-                            prob += required_flow_out == lpSum(
-                                compare_input_list) / in_quantity, "processor flow, vertex {}, source_facility {}," \
-                                                                   " commodity {} output quantity" \
-                                                                   " checked against commodity {} input quantity".format(
-                                vertex_id, out_source, out_commodity_id, in_commodity_id)
-                            for flow_var in compare_input_list:
-                                constrained_input_flow_vars.add(flow_var)
-
-        for key, value in iteritems(flow_in_lists):
-            vertex_id = key
-            for key2, value2 in iteritems(value):
-                commodity_id = key2[0]
-                # out_quantity = key2[1]
-                source = key2[2]
-                # edge_list = value2
-                flow_var_list = value2
-                for flow_var in flow_var_list:
-                    if flow_var not in constrained_input_flow_vars:
-                        prob += flow_var == 0, "processor flow, vertex {} has no matching out edges so zero in of " \
-                                               "commodity {} with source {}".format(
-                            vertex_id, commodity_id, source)
-
-    logger.debug("FINISHED:  create_primary_processor_conservation_of_flow_constraints")
     return prob
 
 
