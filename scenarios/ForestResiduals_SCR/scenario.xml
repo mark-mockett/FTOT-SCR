@@ -31,6 +31,8 @@
     <!-- For small-scale scenarios, units can be changed to pounds and gallons.-->
     <Default_Units_Solid_Phase>tonnes</Default_Units_Solid_Phase>
     <Default_Units_Liquid_Phase>thousand_gallon</Default_Units_Liquid_Phase>
+		<Default_Units_Distance>miles</Default_Units_Distance>
+		<Default_Units_Currency>usd</Default_Units_Currency>
   </Scenario_Inputs>
   <Assumptions>
 		<!-- VEHICLE LOAD QUANTITY AND UNITS -->
